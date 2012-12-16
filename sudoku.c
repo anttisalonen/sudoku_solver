@@ -235,6 +235,7 @@ board_t *search(board_t *b)
 				if(ret2)
 					return ret2;
 			}
+			free(nb);
 		}
 	}
 	return NULL;
