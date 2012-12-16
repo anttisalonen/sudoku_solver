@@ -66,22 +66,23 @@ board_t *new_board()
 	return b;
 }
 
-board_t *read_board(const char* str)
+board_t *read_board(const char* str, long *bytes)
 {
 	board_t *b = new_board();
 	const char* it = str;
 	int i = 0;
-	while(*it != '\0') {
+	while(*it != '\0' && *bytes > 0) {
 		if(*it >= '1' && *it <= '9')
 			b[i++] = set_val(*it - '0');
 		else if(*it == '0' || *it == '.')
 			i++;
 		it++;
+		(*bytes)--;
 		if(i == 81)
 			break;
 	}
 	if(i < 81)
-		free(b);
+		free(b), b = NULL;
 	return b;
 }
 
@@ -243,16 +244,36 @@ board_t *search(board_t *b)
 
 board_t *read_board_from_file(const char* filepath)
 {
-	FILE *fp = fopen(filepath, "r");
-	if(!fp)
-		return NULL;
-	char buf[1024];
-	memset(buf, 0x00, sizeof(buf));
-	int ret = fread(buf, 1, 1024, fp);
-	if(ret <= 0)
-		return NULL;
-	board_t *b = read_board(buf);
-	fclose(fp);
+	static char *buf;
+	static int pos = 0;
+	static long sz = 0;
+	if(!pos) {
+		FILE *fp = fopen(filepath, "r");
+		if(!fp)
+			return NULL;
+
+		fseek(fp, 0L, SEEK_END);
+		sz = ftell(fp);
+		fseek(fp, 0L, SEEK_SET);
+
+		buf = malloc(sz);
+		if(!buf) {
+			fclose(fp);
+			return NULL;
+		}
+		memset(buf, 0x00, sz);
+		int ret = fread(buf, 1, sz, fp);
+		fclose(fp);
+		if(ret <= 0) {
+			free(buf);
+			buf = NULL;
+			return NULL;
+		}
+	}
+
+	long old_sz = sz;
+	board_t *b = read_board(buf + pos, &sz);
+	pos += old_sz - sz;
 	return b;
 }
 
@@ -310,25 +331,33 @@ void usage(const char* a)
 
 int main(int argc, char** argv)
 {
+	int solved = 0;
 	if(argc < 2)
 		usage(argv[0]), exit(1);
-	board_t *b = read_board_from_file(argv[1]);
-	if(!b)
-		fprintf(stderr, "Could not parse\n"), exit(1);
-	int ret = init_propagate(b);
-	if(!ret)
-		fprintf(stderr, "Initial propagation failed\n");
-	else {
-		board_t *sb = search(b);
-		if(!sb) {
-			free(b);
-			fprintf(stderr, "Search failed\n");
+	while(1) {
+		board_t *b = read_board_from_file(argv[1]);
+		if(!b) {
+			if(!solved)
+				fprintf(stderr, "Could not parse\n"), exit(1);
+			break;
 		}
+		int ret = init_propagate(b);
+		if(!ret)
+			fprintf(stderr, "Initial propagation failed\n");
 		else {
-			print_board(sb, stdout);
-			free(sb);
+			board_t *sb = search(b);
+			if(!sb) {
+				free(b);
+				fprintf(stderr, "Search failed\n");
+			}
+			else {
+				print_board(sb, stdout);
+				free(sb);
+			}
+			solved++;
 		}
 	}
-	return 0;
+	printf("Solved %d sudoku%s.\n", solved, solved == 1 ? "" : "s");
+	return !!solved;
 }
 
