@@ -1,7 +1,7 @@
 CFLAGS = -Wall -O2
 CC     = gcc
 
-sudoku:
+sudoku: sudoku.c
 	$(CC) $(CFLAGS) -o sudoku sudoku.c
 
 clean:
